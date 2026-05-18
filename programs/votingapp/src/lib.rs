@@ -12,11 +12,17 @@ pub mod votingapp {
         poll.description = description;
         poll.poll_start_time = start;
         poll.poll_end_time = end;
+        Ok(())    
+
+    }
+    pub fn initialize_candidate(ctx: Context<InitCandidate>, _poll_id: u64, candidate: String) -> Result<()> {
+        ctx.accounts.candidate_account.candidate_name = candidate;
+        ctx.accounts.poll_account.poll_option_index += 1;
         Ok(())
+    }
 
-
-        
-
+    pub fn vote(ctx: Context<Vote>) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -63,8 +69,6 @@ pub struct InitCandidate <'info> {
     pub system_program: Program<'info, System>,
     
 }
-
-
 
 #[account]
 #[derive(InitSpace)]
