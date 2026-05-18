@@ -1,0 +1,267 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f7f9;
+  --foreground: #17201b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  min-height: 2.75rem;
+  border-radius: 8px;
+  border: 1px solid #a9b6ae;
+  background: #ffffff;
+  padding: 0.65rem 0.9rem;
+  color: #17201b;
+  font-weight: 700;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+button:hover:not(:disabled) {
+  border-color: #2f6f4f;
+  background: #e9f3ed;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.primary-button {
+  border-color: #173f2c;
+  background: #173f2c;
+  color: #ffffff;
+}
+
+.primary-button:hover:not(:disabled) {
+  border-color: #225c40;
+  background: #225c40;
+}
+
+.status-bar {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  gap: 0.75rem;
+  overflow-wrap: anywhere;
+  border: 1px solid #d7ddd7;
+  background: #ffffff;
+  padding: 0.75rem 1rem;
+  color: #365144;
+}
+
+.status-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #2f6f4f;
+}
+
+.panel {
+  border: 1px solid #d7ddd7;
+  background: #ffffff;
+  padding: 1rem;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid #e4e8e4;
+  padding-bottom: 0.9rem;
+}
+
+.panel-heading h2 {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.panel-heading span {
+  max-width: 52%;
+  overflow-wrap: anywhere;
+  color: #64776c;
+  font-size: 0.82rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.form-grid.single {
+  grid-template-columns: 1fr;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+label {
+  display: grid;
+  gap: 0.45rem;
+  color: #465a50;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid #c9d2cb;
+  border-radius: 8px;
+  background: #fbfcfb;
+  color: #17201b;
+  outline: none;
+  padding: 0.72rem 0.78rem;
+}
+
+textarea {
+  resize: vertical;
+}
+
+input:focus,
+textarea:focus {
+  border-color: #2f6f4f;
+  box-shadow: 0 0 0 3px rgba(47, 111, 79, 0.12);
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.toggle-row {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.toggle-row input {
+  width: 1rem;
+  height: 1rem;
+}
+
+.details-list {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.details-list div {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: 1rem;
+  border-bottom: 1px solid #eef1ee;
+  padding-bottom: 0.7rem;
+}
+
+.details-list dt {
+  color: #64776c;
+  font-weight: 800;
+}
+
+.details-list dd {
+  overflow-wrap: anywhere;
+  color: #17201b;
+}
+
+.candidate-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.candidate-card {
+  display: flex;
+  min-height: 4.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid #e0e6e1;
+  border-radius: 8px;
+  background: #fbfcfb;
+  padding: 0.85rem;
+}
+
+.candidate-card h3 {
+  font-weight: 800;
+}
+
+.candidate-card p {
+  margin-top: 0.2rem;
+  overflow-wrap: anywhere;
+  color: #64776c;
+  font-size: 0.8rem;
+}
+
+.candidate-card strong {
+  border-radius: 8px;
+  background: #e9f3ed;
+  padding: 0.45rem 0.65rem;
+  color: #173f2c;
+}
+
+.empty-state {
+  margin-top: 1rem;
+  color: #64776c;
+}
+
+.treasury-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.6fr);
+  gap: 1rem;
+}
+
+@media (max-width: 760px) {
+  .form-grid,
+  .treasury-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .details-list div {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  .panel-heading {
+    display: grid;
+  }
+
+  .panel-heading span {
+    max-width: 100%;
+  }
+}
