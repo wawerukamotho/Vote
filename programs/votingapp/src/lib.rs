@@ -1,7 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount};
+//use spl_token::state::Account as SplTokenAccount;
 
-declare_id!("BGKwvkV3e9DEr38NxKXtd1UTuHoGPwrF6yMDSoDRSGvc");
+declare_id!("EfMBRyBhRQSbx5buug3gMYuoMFBtoieHpE2iY1iwhLmP");
 // Constants
 pub const MAX_CANDIDATES: u8 = 30;
 pub const POLL_FEE_LAMPORTS: u64 = 1_000_000; // 0.001 SOL
@@ -62,7 +63,7 @@ pub mod votingapp {
         poll.poll_start_time = start;
         poll.poll_end_time = end;
         poll.poll_option_index = 0;
-        poll.required_token_mint = required_token_mint;
+        poll.required_token_mint = required_token_limit;
         poll.is_active = true;
  
         emit!(PollCreated {
@@ -129,7 +130,7 @@ pub mod votingapp {
         let receipt = &mut ctx.accounts.vote_receipt;
         receipt.voter = ctx.accounts.signer.key();
         receipt.poll_id = poll_id;
-        receipt.candidate = ctx.accounts.candidate_accounts.candidate_name.clone();
+        receipt.candidate = ctx.accounts.candidate_account.candidate_name.clone();
         receipt.timestamp = now;
         receipt.vote_weight = 1; // standard 1 vote per wallet
 
@@ -202,7 +203,7 @@ pub mod votingapp {
         Ok(())
    }
    // closing poll by authority, sets is_active to false, no more votes accepted
-    pub fn close_poll(ctx: Context<ClosePoll>, poll_id: u64) -> Result <()> {
+    pub fn close_poll(ctx: Context<ClosePoll>, _poll_id: u64) -> Result <()> {
         require!(
             ctx.accounts.signer.key() == ctx.accounts.poll_account.authority,
             ErrorCode::Unauthorized
@@ -216,9 +217,347 @@ pub mod votingapp {
     }
 
     // withdraw from treasury by authority, in case of wanting to collect fees or migrate protocol
-    
-
+    pub fn withdraw_treasury(ctx: Context<WithdrawTreasury>, amount: u64) -> Result<()> {
+        require!(
+            ctx.accounts.signer.key() == ctx.accounts.treasury.authority,
+            ErrorCode::Unauthorized
+        );
+        let treasury_info = ctx.accounts.treasury.to_account_info();
+        let dest_info = ctx.accounts.destination.to_account_info();
+ 
+        // Manual lamport transfer (no system-program CPI needed for PDA → wallet)
+        **treasury_info.try_borrow_mut_lamports()? = treasury_info
+            .lamports()
+            .checked_sub(amount)
+            .ok_or(ErrorCode::Overflow)?;
+        **dest_info.try_borrow_mut_lamports()? = dest_info
+            .lamports()
+            .checked_add(amount)
+            .ok_or(ErrorCode::Overflow)?;
+ 
+        ctx.accounts.treasury.total_collected = ctx
+            .accounts
+            .treasury
+            .total_collected
+            .checked_sub(amount)
+            .ok_or(ErrorCode::Overflow)?;
+        Ok(())
+    }
 }
+fn integer_sqrt(n: u64) -> u64 {
+    if n == 0 {
+        return 0;
+    }
+    let mut x = n;
+    let mut y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    x
+}
+// individual account contexts
+
+#[derive(Accounts)]
+pub struct InitTreasury<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+ 
+    #[account(
+        init,
+        payer = signer,
+        space = 8 + TreasuryAccount::INIT_SPACE,
+        seeds = [b"treasury"],
+        bump
+    )]
+    pub treasury: Account<'info, TreasuryAccount>,
+ 
+    pub system_program: Program<'info, System>,
+}
+ 
+#[derive(Accounts)]
+#[instruction(poll_id: u64)]
+pub struct InitPoll<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+ 
+    #[account(
+        init,
+        payer = signer,
+        space = 8 + PollAccount::INIT_SPACE,
+        seeds = [b"poll", poll_id.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub poll_account: Account<'info, PollAccount>,
+ 
+    /// CHECK: treasury PDA validated by seeds
+    #[account(
+        mut,
+        seeds = [b"treasury"],
+        bump
+    )]
+    pub treasury: Account<'info, TreasuryAccount>,
+ 
+    pub system_program: Program<'info, System>,
+}
+ 
+#[derive(Accounts)]
+#[instruction(poll_id: u64, candidate: String)]
+pub struct InitCandidate<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+ 
+    #[account(
+        mut,
+        seeds = [b"poll", poll_id.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub poll_account: Account<'info, PollAccount>,
+ 
+    #[account(
+        init,
+        payer = signer,
+        space = 8 + CandidateAccount::INIT_SPACE,
+        seeds = [b"candidate", poll_id.to_le_bytes().as_ref(), candidate.as_bytes()],
+        bump
+    )]
+    pub candidate_account: Account<'info, CandidateAccount>,
+ 
+    pub system_program: Program<'info, System>,
+}
+ 
+#[derive(Accounts)]
+#[instruction(poll_id: u64, candidate: String)]
+pub struct CastVote<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+ 
+    #[account(
+        mut,
+        seeds = [b"poll", poll_id.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub poll_account: Account<'info, PollAccount>,
+ 
+    #[account(
+        mut,
+        seeds = [b"candidate", poll_id.to_le_bytes().as_ref(), candidate.as_bytes()],
+        bump
+    )]
+    pub candidate_account: Account<'info, CandidateAccount>,
+ 
+    /// VoteReceipt PDA – init fails automatically if already exists (double-vote guard).
+    #[account(
+        init,
+        payer = signer,
+        space = 8 + VoteReceipt::INIT_SPACE,
+        seeds = [b"vote", poll_id.to_le_bytes().as_ref(), signer.to_account_info().key.as_ref()],
+        bump
+    )]
+    pub vote_receipt: Account<'info, VoteReceipt>,
+ 
+    pub system_program: Program<'info, System>,
+}
+/*
+#[derive(Accounts)]
+#[instruction(poll_id: u64, candidate: String)]
+pub struct CastVoteTokenGated<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+ 
+    #[account(
+        mut,
+        seeds = [b"poll", poll_id.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub poll_account: Account<'info, PollAccount>,
+ 
+    #[account(
+        mut,
+        seeds = [b"candidate", poll_id.to_le_bytes().as_ref(), candidate.as_bytes()],
+        bump
+    )]
+    pub candidate_account: Account<'info, CandidateAccount>,
+ 
+    #[account(
+        init,
+        payer = signer,
+        space = 8 + VoteReceipt::INIT_SPACE,
+        seeds = [b"vote", poll_id.to_le_bytes().as_ref(), signer.to_account_info().key.as_ref()],
+        bump
+    )]
+    pub vote_receipt: Account<'info, VoteReceipt>,
+    
+ 
+    /// Voter's SPL token account – must match poll.required_token_mint
+    #[account(
+        associated_token::mint = poll_account.required_token_mint,
+        associated_token::authority = signer,
+    )]
+    pub voter_token_account: Account<'info, TokenAccount>,
+ 
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+} */
+
+#[derive(Accounts)]
+#[instruction(poll_id: u64, candidate: String)]
+pub struct CastVoteTokenGated<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"poll", poll_id.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub poll_account: Account<'info, PollAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"candidate", poll_id.to_le_bytes().as_ref(), candidate.as_bytes()],
+        bump
+    )]
+    pub candidate_account: Account<'info, CandidateAccount>,
+
+    #[account(
+        init,
+        payer = signer,
+        space = 8 + VoteReceipt::INIT_SPACE,
+        seeds = [b"vote", poll_id.to_le_bytes().as_ref(), signer.to_account_info().key.as_ref()],
+        bump
+    )]
+    pub vote_receipt: Account<'info, VoteReceipt>,
+
+    /// Voter's SPL token account – must match poll.required_token_mint
+    /// You must check the mint in your handler, not in the constraint, since it's an Option<Pubkey>
+    #[account(mut)]
+    pub voter_token_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+ 
+#[derive(Accounts)]
+#[instruction(poll_id: u64)]
+pub struct ClosePoll<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+ 
+    #[account(
+        mut,
+        seeds = [b"poll", poll_id.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub poll_account: Account<'info, PollAccount>,
+}
+ 
+#[derive(Accounts)]
+pub struct WithdrawTreasury<'info> {
+    #[account(mut)]
+    pub signer: Signer<'info>,
+ 
+    #[account(
+        mut,
+        seeds = [b"treasury"],
+        bump
+    )]
+    pub treasury: Account<'info, TreasuryAccount>,
+ 
+    /// CHECK: destination wallet – authority verifies intent
+    #[account(mut)]
+    pub destination: UncheckedAccount<'info>,
+}
+ 
+// ─── Account Structs ──────────────────────────────────────────────────────────
+ 
+#[account]
+#[derive(InitSpace)]
+pub struct TreasuryAccount {
+    pub authority: Pubkey,
+    pub total_collected: u64,
+}
+ 
+#[account]
+#[derive(InitSpace)]
+pub struct PollAccount {
+    pub poll_id: u64,
+    pub authority: Pubkey,
+    #[max_len(32)]
+    pub poll_name: String,
+    #[max_len(280)]
+    pub description: String,
+    /// Off-chain metadata URI (IPFS / Arweave)
+    #[max_len(128)]
+    pub metadata_uri: String,
+    pub poll_start_time: u64,
+    pub poll_end_time: u64,
+    pub poll_option_index: u64,
+    /// Some(mint) → token-gated; None → open
+    pub required_token_mint: Option<Pubkey>,
+    pub is_active: bool,
+}
+ 
+#[account]
+#[derive(InitSpace)]
+pub struct CandidateAccount {
+    #[max_len(32)]
+    pub candidate_name: String,
+    pub candidate_votes: u64,
+}
+ 
+/// Immutable audit trail – one per (poll_id, voter).
+#[account]
+#[derive(InitSpace)]
+pub struct VoteReceipt {
+    pub voter: Pubkey,
+    pub poll_id: u64,
+    #[max_len(32)]
+    pub candidate: String,
+    pub timestamp: i64,
+    pub vote_weight: u64,
+}
+ 
+// ─── Events ───────────────────────────────────────────────────────────────────
+ 
+#[event]
+pub struct TreasuryInitialized {
+    pub authority: Pubkey,
+}
+ 
+#[event]
+pub struct PollCreated {
+    pub poll_id: u64,
+    pub authority: Pubkey,
+    pub name: String,
+    pub start: u64,
+    pub end: u64,
+}
+ 
+#[event]
+pub struct CandidateAdded {
+    pub poll_id: u64,
+    pub candidate_name: String,
+}
+ 
+#[event]
+pub struct VoteCast {
+    pub voter: Pubkey,
+    pub poll_id: u64,
+    pub candidate: String,
+    pub weight: u64,
+    pub timestamp: i64,
+}
+ 
+#[event]
+pub struct PollClosed {
+    pub poll_id: u64,
+    pub authority: Pubkey,
+}
+ 
+  
+
+
     
 #[error_code]
 pub enum ErrorCode {
